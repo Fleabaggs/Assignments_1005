@@ -1,0 +1,139 @@
+---
+title: "Assignment_1_1005"
+format: html
+editor: visual
+---
+
+## Assignment 1
+
+This is assignment 1
+
+```{r}
+# Libraries
+library(zoo)
+library(dplyr)
+library(purrr)
+library(tidyverse)
+
+```
+
+```{r}
+# leser inn data
+url1 <- "http://vortex.nsstc.uah.edu/data/msu/v6.1/tlt/uahncdc_lt_6.1.txt"
+df1 <- read.table(url1, header = FALSE, skip = 0, fill = TRUE)
+
+url2 <- "http://vortex.nsstc.uah.edu/data/msu/v6.1/tmt/uahncdc_mt_6.1.txt"
+df2 <- read.table(url2, header = FALSE, skip = 0, fill = TRUE)
+
+url3 <- "http://vortex.nsstc.uah.edu/data/msu/v6.1/ttp/uahncdc_tp_6.1.txt"
+df3 <- read.table(url3, header = FALSE, skip = 0, fill = TRUE)
+
+url4 <- "http://vortex.nsstc.uah.edu/data/msu/v6.1/tls/uahncdc_ls_6.1.txt"
+df4 <- read.table(url4, header = FALSE, skip = 0, fill = TRUE)
+
+
+# Flytter første rad til kolonnenavn, og fjerner første rad fra dataene
+colnames(df1) <- as.character(unlist(df1[1, ])) 
+df1 <- df1[-1, ]  
+
+colnames(df2) <- as.character(unlist(df2[1, ])) 
+df2 <- df2[-1, ] 
+
+colnames(df3) <- as.character(unlist(df3[1, ])) 
+df3 <- df3[-1, ] 
+
+colnames(df4) <- as.character(unlist(df4[1, ])) 
+df4 <- df4[-1, ] 
+
+
+# Tar bort alle kolonner unntatt de 3 første
+df1 <- df1[, 1:3]
+df2 <- df2[, 1:3]
+df3 <- df3[, 1:3]
+df4 <- df4[, 1:3]
+
+```
+
+```{r}
+# Setter alle globale temperaturer i ett datasett
+
+# Liste over dataframes
+dfs <- list(df1, df2, df3, df4)
+
+# Slå sammen alle dataframes basert på Year og Mo, og velg kun relevante kolonner
+df_combined <- reduce(dfs, full_join, by = c("Year", "Mo"))
+
+```
+
+```{r}
+# Gir kolonner nye navn
+
+df_combined <- df_combined %>% 
+  rename(globe_low = Globe.x,
+         globe_mid = Globe.y,
+         globe_pau = Globe.x.x,
+         globe_stra = Globe.y.y)
+
+```
+
+```{r}
+# Gjør kolonnene numeriske
+df_combined <- df_combined %>%
+  mutate_if(is.character, as.numeric)
+
+
+```
+
+```{r}
+# Regner ut gjennomsnittstempraturer og runder av tallene
+df_average <- df_combined %>%
+  group_by(Year) %>%
+  summarise(
+    avg_low = round(mean(`globe_low`, na.rm = TRUE), 3),
+    avg_mid = round(mean(`globe_mid`, na.rm = TRUE), 3),
+    avg_pau = round(mean(`globe_pau`, na.rm = TRUE), 3),
+    avg_stra = round(mean(`globe_stra`, na.rm = TRUE), 3)
+  )
+
+
+# Gjør til long-format slik at det blir enklere å plotte
+df_average_long <- df_average %>%
+  pivot_longer(cols = starts_with("avg"),
+               names_to = "Globe",        
+               values_to = "Value")
+
+```
+
+```{r}
+# Gjør Year numerisk slik at det blir behandlet riktig av koden
+df_average_long <- df_average_long %>%
+  mutate(Year = as.numeric(as.character(Year)))
+
+# Plotter figur
+df_average_long %>% 
+  ggplot(aes(x = Year, y = Value, color = Globe)) +
+  geom_line() +
+  # Velger tittel og navn på akser
+  labs(
+    title = "Average global temperature change per year",
+    subtitle = "1979 - 2024",
+    x = "Year",
+    y = "Average temperature change",
+    color = "Part of the Globe") +
+  # Velger minimal som theme
+  theme_minimal() +
+  theme(
+    # Plasserer legenden på bunnen
+    legend.position = "bottom",
+    # Gjør tiitelen større og plasserer på midten
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    # Plasserer subtitle på midten
+    plot.subtitle = element_text(hjust = 0.5),
+  ) +
+  # Justerer y-aksen slik at dataene sprer seg bedre ut
+  scale_y_continuous(limits = c(-0.55, 1.3), breaks = seq(-0.55, 1.3, by = 0.25))+
+  # Justerer x-aksen
+  scale_x_continuous(breaks = seq(1979, 2024, by = 3))+
+  # Endrer navn på labels
+  scale_color_discrete(labels = c("Lower Troposphere", "Mid Troposphere", "Tropopause", "Lower Stratosphere"))
+```

@@ -1,0 +1,227 @@
+---
+title: "1005_Assignment_2"
+format: html
+editor: visual
+---
+
+## Assignment 2
+
+## Task 1
+
+```{r}
+# Packages
+
+rm(list=ls())
+
+library(tidyverse)
+library(rvest)
+library(janitor)
+library(ggrepel)
+library(stringr)
+
+```
+
+1: For the last 3 months of 2017, calculate the total Sales by month, for Region 1 and Region 9 in the Customer_Segment, Corporate, and Consumer. This output is Table 1.
+
+```{r}
+# Loading data
+
+url <- "https://raw.githubusercontent.com/uit-sok-1005-v23/uit-sok-1005-v23.github.io/main/storedata.csv"
+df <- read.csv(url)
+
+
+```
+
+```{r}
+
+table1 <- df %>% 
+  # Arrange the dataset based on date
+  arrange(Order_Date) %>% 
+  # Filtering the relevant regions, months and customer group
+  filter(Region %in% c("Region 1", "Region 9")) %>% 
+  filter(Order_Date >= ymd("2017-10-01") & Order_Date <= ymd("2017-12-31")) %>% 
+  filter(Customer_Segment %in% c("Corporate", "Consumer")) %>% 
+  # Grouping by the relevant factors
+  group_by(Order_Date, Region, Customer_Segment) %>%
+  # Calculating total sales with summarise
+  summarise(Total_Sales = sum(Sales), .groups = "drop")
+
+
+```
+
+2: Make a plot of the monthly total Sales in Region 1 and Region 13 in 2015, 2016, and 2017. This output is Figure 1.
+
+```{r}
+
+figure1 <- df %>% 
+  # Selectimng the relevant columns
+  select(Order_Date, Sales, Region) %>% 
+  # filtering out relevant regions
+  filter(Region %in% c("Region 1", "Region 13")) %>% 
+  # Mutate order_date from chr to date
+  mutate(date = ymd(Order_Date)) %>% 
+  mutate(year = year(date),
+         month = month(date)) %>% 
+  # Filtering out relevamt years
+  filter(year %in% c(2015, 2016, 2017)) %>% 
+  # Creating a year_month column to make plotting easier
+  mutate(year_month = make_date(year, month, 1)) %>% 
+  group_by(Region, year_month) %>% 
+  # Calculating total sales
+  summarise(total_sales = sum(Sales, na.rm = TRUE))
+
+figure1 %>% 
+  ggplot(aes(x = year_month, y = total_sales, color = Region)) + 
+  geom_line() +
+  theme_minimal() +
+  scale_color_manual(values = c("Region 1" = "violet", "Region 13" = "orange")) +
+  labs(
+    title = "Total sales in region 1 and 13 from 2015 to 2017",
+    x = "Date",
+    y = "Total sales"
+  )
+
+
+```
+
+3: In Figure 1, identify the months where the total Sales in Region 13 is greater than the total Sales in Region 1. This output is Table 2.
+
+```{r}
+
+table2 <- figure1 %>% 
+  # Giving the regions their own columns
+  pivot_wider(names_from = Region, values_from = total_sales) %>% 
+  # Making the columnn-names easier to work with
+  clean_names() %>% 
+  # Filtering out the values where regions 13 is higher than 1
+  filter(region_13 > region_1)
+
+
+```
+
+4: Find the average Profit per Customer_Segment and Product_Category in 2017, for all regions except Region 3, 5 and 8. What segment produced the highest average profit? This output is Table 3.
+
+```{r}
+
+table3 <- df %>% 
+  # Removing regions we dont need
+  filter(!Region %in% c("Region 3", "Region 5", "Region 8")) %>% 
+  # Filtering out only 2017
+  filter(Order_Date >= ymd("2017-01-01") & Order_Date <= ymd("2017-12-31")) %>% 
+  # Selecting the columns we need
+  select(Order_Date, Profit, Customer_Segment, Product_Category, Region) %>% 
+  # Grouping variabler
+  group_by(Region, Order_Date, Customer_Segment, Product_Category) %>% 
+  # Calculating average profit, .groups to override
+  summarise(average_profit = mean(Profit, na.rm = TRUE), .groups = "drop") %>% 
+  # Descenduing order
+  arrange(desc(average_profit))
+
+  
+
+```
+
+## Task 2
+
+```{r}
+
+library(rvest)
+
+# Downloading data
+
+url <- "https://www.motor.no/aktuelt/motors-store-vintertest-av-rekkevidde-pa-elbiler/217132"
+webpage <- read_html(url)
+html_table(html_nodes(webpage, "div table")[[1]])
+
+```
+
+```{r}
+
+url <- "https://www.motor.no/aktuelt/motors-store-vintertest-av-rekkevidde-pa-elbiler/217132"
+tables <- html_nodes(webpage, "table")
+car_data <- html_table(tables[[1]], fill = TRUE)
+
+```
+
+```{r}
+# Making the first row of the dataset the title od each column
+
+colnames(car_data) <- as.character(car_data[1, ]) 
+car_data <- car_data[-1, ]
+```
+
+a\)
+
+Create a ggplot, where “stop” is on the y-axis, and “wltp” is on the x-axis. Add a 45-degree line showing how far the cars “really” should have driven (red line in my fig below). Create an appropriate title and accompanying character text that explains what is “happening” in the figure.
+
+```{r}
+
+# Extracting only the numeric value in the wlp and stopp columns
+car_data_clean <- car_data %>%
+  mutate(WLTP_numeric = as.numeric(str_extract(`WLTP-tall`, "\\d+"))) %>% 
+  mutate(STOPP_numeric = as.numeric(str_extract(`STOPP`, "\\d+")))
+
+
+# Plotting with extracted values
+car_data_clean %>%
+  ggplot(aes(x = WLTP_numeric, y = STOPP_numeric)) +  
+  geom_point() +
+  # Adding 45 degree line
+  geom_abline(slope = 1, intercept = 0, color = "red", linewidth = 1) + 
+  labs(
+    title = "Expected driving range for cars vs. actual range",
+    x = "Range measured in km (WLTP)",
+    y = "Stop measured in km"
+  ) +
+  theme_minimal() +
+  # Adjusting the scale on the figure so the 45 degree line makes sense
+  scale_x_continuous(limits = c(150, 700), breaks = seq(150, 700, by = 25), expand = c(0, 0)) + 
+  scale_y_continuous(limits = c(150, 600), breaks = seq(150, 600, by = 25), expand = c(0, 0)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+  )
+
+```
+
+Above is a figure showing different electric cars advertised mileage, versus actual mileage when tested. The test was performed during a norwegian winter to show how cold weather affects the battery-life of electric cars. The red line represents how far the cars should be able to drive with a full battery, and the dots show how far each car actually got.
+
+b\)
+
+None of the car brands reach the red line (expected mileage). But there is a clear positive correlation between what is promised and actual mileage. 
+
+Use R’s [lm()function](https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/lm). Use “stop” as y variable and “wltp” as an x-variable, and specify the name of your data set. 
+
+lm(\< Y variable name \> \~ \<X variable \>, data = \<dataset name\>)
+
+After “running” the code, how do you interpret the two values on the customized line?\
+Add the custom line to ggplot using +geom_smooth(method = lm).
+
+```{r}
+
+lm_car <- lm(STOPP_numeric ~ WLTP_numeric, data = car_data_clean)
+summary(lm_data)
+
+# Using same plot as earlier
+car_data_clean %>%
+  ggplot(aes(x = WLTP_numeric, y = STOPP_numeric)) +  
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red", linewidth = 1) + 
+  # Adding the lm line
+  geom_smooth(method = "lm", color = "skyblue") +
+  labs(
+    title = "Expected driving range for cars vs. actual range",
+    x = "Range measured in km (WLTP)",
+    y = "Stop measured in km"
+  ) +
+  theme_minimal() +
+  scale_x_continuous(limits = c(150, 700), breaks = seq(150, 700, by = 25), expand = c(0, 0)) + 
+  scale_y_continuous(limits = c(150, 600), breaks = seq(150, 600, by = 25), expand = c(0, 0)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+  )
+
+
+
+```
